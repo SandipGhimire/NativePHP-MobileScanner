@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalGetImage::class)
+@file:androidx.annotation.OptIn(markerClass = [ExperimentalGetImage::class])
 
 package com.sandip.plugins.scanner
 
