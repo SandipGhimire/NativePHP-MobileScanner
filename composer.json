@@ -1,6 +1,5 @@
 {
     "name": "sghimire/mobile-scanner",
-    "version": "1.0.0",
     "description": "Self-contained native QR/barcode scanner (CameraX + ML Kit / AVFoundation) for NativePHP Mobile — own facade, fluent multi-format API, events, and JS bindings, with no dependency on the paid nativephp/mobile-scanner plugin.",
     "type": "nativephp-plugin",
     "keywords": ["nativephp", "scanner", "qr-code", "barcode", "camera", "laravel", "mobile"],
