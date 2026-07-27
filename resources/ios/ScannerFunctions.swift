@@ -10,6 +10,13 @@ enum ScannerFunctions {
 
     static let validFormats: Set<String> = ["qr", "ean13", "ean8", "code128", "code39", "upca", "upce"]
 
+    private struct PendingScan {
+        let prompt: String
+        let continuous: Bool
+        let formats: [String]
+        let id: String?
+    }
+
     private static func metadataObjectTypes(for names: [String]) -> [AVMetadataObject.ObjectType] {
         if names.contains("all") {
             return [.qr, .ean13, .ean8, .code128, .code39, .upce, .code93, .pdf417, .aztec, .dataMatrix, .interleaved2of5, .itf14, .codabar]
@@ -54,11 +61,27 @@ enum ScannerFunctions {
                 return BridgeResponse.success(data: ["started": true])
 
             case .notDetermined:
-                AVCaptureDevice.requestAccess(for: .video) { _ in }
-                return BridgeResponse.error(
-                    code: "PERMISSION_REQUIRED",
-                    message: "Camera permission was just requested — grant it, then try scanning again."
-                )
+                let pending = PendingScan(prompt: prompt, continuous: continuous, formats: requestedFormats, id: id)
+
+                AVCaptureDevice.requestAccess(for: .video) { granted in
+                    DispatchQueue.main.async {
+                        if granted {
+                            ScannerFunctions.present(
+                                prompt: pending.prompt,
+                                continuous: pending.continuous,
+                                formats: pending.formats,
+                                id: pending.id
+                            )
+                        } else {
+                            LaravelBridge.shared.send?(ScannerFunctions.cancelledEvent, [
+                                "reason": "permission_denied",
+                                "id": pending.id,
+                            ])
+                        }
+                    }
+                }
+
+                return BridgeResponse.success(data: ["permissionRequested": true])
 
             case .denied, .restricted:
                 return BridgeResponse.error(

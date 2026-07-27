@@ -3,6 +3,7 @@
 package com.sandip.plugins.scanner
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.util.Log
@@ -37,7 +38,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 object ScannerFunctions {
 
     private const val TAG = "ScannerFunctions"
-    private const val CAMERA_PERMISSION_REQUEST_CODE = 4272
+    const val CAMERA_PERMISSION_REQUEST_CODE = 4272
     private const val CODE_SCANNED_EVENT = "Sandip\\Scanner\\Native\\Events\\Scanner\\CodeScanned"
     private const val CANCELLED_EVENT = "Sandip\\Scanner\\Native\\Events\\Scanner\\Cancelled"
 
@@ -45,6 +46,16 @@ object ScannerFunctions {
 
     @Volatile
     private var activeOverlay: ScannerOverlay? = null
+
+    private data class PendingScan(
+        val prompt: String,
+        val continuous: Boolean,
+        val formats: List<String>,
+        val id: String?,
+    )
+
+    @Volatile
+    private var pendingScan: PendingScan? = null
 
     private val FORMAT_MAP: Map<String, Int> = mapOf(
         "qr" to Barcode.FORMAT_QR_CODE,
@@ -88,6 +99,55 @@ object ScannerFunctions {
             .build()
     }
 
+    private object PermissionPrefs {
+        private const val PREFS_NAME = "scanner_permission_prefs"
+        private const val KEY_ASKED = "camera_permission_asked"
+
+        fun hasAskedBefore(context: Context): Boolean =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ASKED, false)
+
+        fun markAsked(context: Context) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_ASKED, true)
+                .apply()
+        }
+    }
+
+    private fun startScan(
+        activity: FragmentActivity,
+        prompt: String,
+        continuous: Boolean,
+        formats: List<String>,
+        id: String?,
+    ) {
+        activity.runOnUiThread {
+            activeOverlay?.finish(cancelled = true)
+            val overlay = ScannerOverlay(activity, prompt, continuous, formats, id)
+            activeOverlay = overlay
+            overlay.show()
+        }
+    }
+
+    fun onRequestPermissionsResult(activity: FragmentActivity, requestCode: Int, grantResults: IntArray) {
+        if (requestCode != CAMERA_PERMISSION_REQUEST_CODE) return
+        val pending = pendingScan ?: return
+        pendingScan = null
+
+        val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            startScan(activity, pending.prompt, pending.continuous, pending.formats, pending.id)
+        } else {
+            activity.runOnUiThread {
+                val payload = JSONObject()
+                payload.put("reason", "permission_denied")
+                if (pending.id != null) payload.put("id", pending.id)
+                NativeActionCoordinator.dispatchEvent(activity, CANCELLED_EVENT, payload.toString())
+            }
+        }
+    }
+
     class Scan(private val activity: FragmentActivity) : BridgeFunction {
         override fun execute(parameters: Map<String, Any>): Map<String, Any> {
             val prompt = parameters["prompt"] as? String ?: "Scan Code"
@@ -109,36 +169,32 @@ object ScannerFunctions {
             if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED
             ) {
-                val deniedPermanently = !ActivityCompat.shouldShowRequestPermissionRationale(
+                val askedBefore = PermissionPrefs.hasAskedBefore(activity)
+                val canShowRationale = ActivityCompat.shouldShowRequestPermissionRationale(
                     activity,
                     Manifest.permission.CAMERA
                 )
 
-                if (!deniedPermanently) {
-                    ActivityCompat.requestPermissions(
-                        activity,
-                        arrayOf(Manifest.permission.CAMERA),
-                        CAMERA_PERMISSION_REQUEST_CODE
-                    )
-
+                if (askedBefore && !canShowRationale) {
                     return BridgeResponse.error(
-                        "PERMISSION_REQUIRED",
-                        "Camera permission was just requested — grant it, then try scanning again."
+                        "PERMISSION_DENIED",
+                        "Camera access is denied. Enable it in Settings to use the scanner."
                     )
                 }
 
-                return BridgeResponse.error(
-                    "PERMISSION_DENIED",
-                    "Camera access is denied. Enable it in Settings to use the scanner."
+                PermissionPrefs.markAsked(activity)
+                pendingScan = PendingScan(prompt, continuous, requestedFormats, id)
+
+                ActivityCompat.requestPermissions(
+                    activity,
+                    arrayOf(Manifest.permission.CAMERA),
+                    CAMERA_PERMISSION_REQUEST_CODE
                 )
+
+                return BridgeResponse.success(mapOf("permissionRequested" to true))
             }
 
-            activity.runOnUiThread {
-                activeOverlay?.finish(cancelled = true)
-                val overlay = ScannerOverlay(activity, prompt, continuous, requestedFormats, id)
-                activeOverlay = overlay
-                overlay.show()
-            }
+            startScan(activity, prompt, continuous, requestedFormats, id)
 
             return BridgeResponse.success(mapOf("started" to true))
         }
