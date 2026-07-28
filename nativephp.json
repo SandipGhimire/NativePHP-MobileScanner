@@ -28,7 +28,7 @@
             "name": "MobileScanner.Scan",
             "android": "com.sandip.plugins.scanner.ScannerFunctions.Scan",
             "ios": "ScannerFunctions.Scan",
-            "description": "Present a full-screen native camera scanner for one or more barcode formats. Returns immediately once the UI is shown; results (and continuous re-scans, if enabled) arrive later via the CodeScanned event, and closing without a match fires Cancelled."
+            "description": "Present a full-screen native camera scanner for one or more barcode formats. Unless disabled via allowGallery=false, the overlay includes a gallery button that lets the user pick a photo instead of using the live camera; the picked image is decoded on-device for the same requested formats. Returns immediately once the UI is shown; results (from the camera, continuous re-scans, or a gallery pick) arrive later via the CodeScanned event, and closing without a match fires Cancelled."
         },
         {
             "name": "MobileScanner.Stop",
@@ -49,6 +49,7 @@
                 "androidx.camera:camera-camera2:1.3.4",
                 "androidx.camera:camera-lifecycle:1.3.4",
                 "androidx.camera:camera-view:1.3.4",
+                "androidx.activity:activity-ktx:1.9.3",
                 "com.google.mlkit:barcode-scanning:17.3.0"
             ]
         },

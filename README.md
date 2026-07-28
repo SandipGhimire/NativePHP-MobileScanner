@@ -7,6 +7,7 @@ This package is a **free, self-contained alternative** to the paid `nativephp/mo
 ## Features
 
 - Full-screen native camera scanner for QR codes and common barcode formats.
+- Built-in gallery button on the scanner overlay — pick an existing photo instead of the live camera, decoded on-device (Android Photo Picker + ML Kit, iOS `PHPickerViewController` + Vision). No extra permissions or setup required.
 - Fluent, chainable scan builder in both PHP and JavaScript.
 - Single-shot or continuous (multi-scan) sessions.
 - Programmatically stop an open scan session.
@@ -44,6 +45,25 @@ Same two-phase pattern as every async call in this plugin family — a synchrono
 
 Because results are asynchronous and delivered to PHP and JS independently, always drive your UI from the `CodeScanned` / `Cancelled` events — never from the return value of `scan()`.
 
+### Scanning from the photo gallery
+
+Every scanner overlay opened by `MobileScanner.Scan` includes a gallery button (🖼) next to the close/torch buttons by default. No PHP/JS code or extra config is needed — it's part of the same overlay:
+
+- Tapping it opens the OS photo picker (Android Photo Picker, iOS `PHPickerViewController`) — neither requires a photo-library permission.
+- The chosen image is decoded on-device against the same `formats()` you passed to `scan()` (Android: ML Kit; iOS: the Vision framework).
+- A match fires `CodeScanned` exactly like a camera match, and closes the scanner — even in `continuous()` mode, since picking a photo is a deliberate one-off action.
+- If no supported code is found in the picture, a short native message is shown and the scanner stays open so the user can try the camera or pick another photo — no event fires for that case.
+
+Turn it off per scan with `->gallery(false)` (PHP) / `.gallery(false)` (JS) — the button is simply omitted from the overlay, camera-only:
+
+```php
+Scanner::scan()->gallery(false)->scan();
+```
+
+```js
+Scanner.scan().gallery(false);
+```
+
 ---
 
 ## PHP Usage
@@ -75,6 +95,7 @@ If you never call `->scan()` explicitly, it fires automatically when the builder
 |---|---|
 | `prompt(string $text)` | Instruction text shown above the camera viewfinder. Defaults to `"Scan Code"`. |
 | `continuous(bool $continuous = true)` | Keep the scanner open and keep firing `CodeScanned` after each match instead of closing on the first one. |
+| `gallery(bool $allow = true)` | Show/hide the gallery button on the overlay. Defaults to `true`; pass `false` to force camera-only scanning. |
 | `formats(array $formats)` | Restrict detection to one or more formats (see table below). Throws `InvalidArgumentException` if empty or unknown. |
 | `id(string $id)` | Custom correlation ID for this scan session (not auto-generated — `null` unless set). |
 | `getId()` | Get this scan's correlation ID, or `null`. |
@@ -272,6 +293,7 @@ export function TicketScanner() {
 | `Scanner.scan()` | `() => PendingScan` | Start building a scan session. |
 | `.prompt(text)` | `(string) => this` | Instruction text above the viewfinder. |
 | `.continuous(continuous?)` | `(boolean = true) => this` | Keep scanning after each match. |
+| `.gallery(allow?)` | `(boolean = true) => this` | Show/hide the gallery button. Defaults to `true`; pass `false` for camera-only. |
 | `.formats(formats)` | `(BarcodeFormat[]) => this` | Restrict detection to given formats. Throws if empty/invalid. |
 | `.id(id)` | `(string) => this` | Custom correlation ID. |
 | `.getId()` | `() => string \| null` | Read the current correlation ID. |
@@ -503,6 +525,8 @@ export function TicketScanner() {
 | Min OS version | API 23 | 15.0 |
 | Permission | `android.permission.CAMERA` | `NSCameraUsageDescription` in `Info.plist` |
 | Native implementation | `resources/android/ScannerFunctions.kt` (CameraX + ML Kit barcode scanning) | `resources/ios/ScannerFunctions.swift` (AVFoundation) |
+| Gallery picker | Android Photo Picker (`ActivityResultContracts.PickVisualMedia`) — no permission needed | `PHPickerViewController` — no permission needed |
+| Gallery decoding | ML Kit (`InputImage.fromFilePath`) | Vision (`VNDetectBarcodesRequest`) |
 
 Both are configured automatically by `nativephp.json` — you don't need to edit native project files by hand. Continuous mode uses a debounce window on both platforms so the same code isn't reported multiple times per second.
 

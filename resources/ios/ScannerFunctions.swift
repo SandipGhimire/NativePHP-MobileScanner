@@ -1,5 +1,7 @@
 import AVFoundation
+import PhotosUI
 import UIKit
+import Vision
 
 enum ScannerFunctions {
 
@@ -9,13 +11,6 @@ enum ScannerFunctions {
     static weak var activeController: ScannerViewController?
 
     static let validFormats: Set<String> = ["qr", "ean13", "ean8", "code128", "code39", "upca", "upce"]
-
-    private struct PendingScan {
-        let prompt: String
-        let continuous: Bool
-        let formats: [String]
-        let id: String?
-    }
 
     private static func metadataObjectTypes(for names: [String]) -> [AVMetadataObject.ObjectType] {
         if names.contains("all") {
@@ -38,10 +33,32 @@ enum ScannerFunctions {
         return Array(types)
     }
 
+    static func barcodeSymbologies(for names: [String]) -> [VNBarcodeSymbology] {
+        if names.contains("all") {
+            return [.qr, .ean13, .ean8, .code128, .code39, .upce, .code93, .pdf417, .aztec, .dataMatrix, .itf14, .codabar]
+        }
+
+        var symbologies = Set<VNBarcodeSymbology>()
+        for name in names {
+            switch name {
+            case "qr": symbologies.insert(.qr)
+            case "ean13": symbologies.insert(.ean13)
+            case "ean8": symbologies.insert(.ean8)
+            case "code128": symbologies.insert(.code128)
+            case "code39": symbologies.insert(.code39)
+            case "upce": symbologies.insert(.upce)
+            case "upca": symbologies.insert(.ean13)
+            default: break
+            }
+        }
+        return symbologies.isEmpty ? [.qr] : Array(symbologies)
+    }
+
     class Scan: BridgeFunction {
         func execute(parameters: [String: Any]) throws -> [String: Any] {
             let prompt = parameters["prompt"] as? String ?? "Scan Code"
             let continuous = parameters["continuous"] as? Bool ?? false
+            let allowGallery = parameters["allowGallery"] as? Bool ?? true
             let id = parameters["id"] as? String
             let requestedFormats = (parameters["formats"] as? [String])?.filter { !$0.isEmpty } ?? ["qr"]
 
@@ -56,28 +73,17 @@ enum ScannerFunctions {
             switch AVCaptureDevice.authorizationStatus(for: .video) {
             case .authorized:
                 DispatchQueue.main.async {
-                    ScannerFunctions.present(prompt: prompt, continuous: continuous, formats: requestedFormats, id: id)
+                    ScannerFunctions.present(prompt: prompt, continuous: continuous, allowGallery: allowGallery, formats: requestedFormats, id: id)
                 }
                 return BridgeResponse.success(data: ["started": true])
 
             case .notDetermined:
-                let pending = PendingScan(prompt: prompt, continuous: continuous, formats: requestedFormats, id: id)
-
                 AVCaptureDevice.requestAccess(for: .video) { granted in
                     DispatchQueue.main.async {
-                        if granted {
-                            ScannerFunctions.present(
-                                prompt: pending.prompt,
-                                continuous: pending.continuous,
-                                formats: pending.formats,
-                                id: pending.id
-                            )
-                        } else {
-                            LaravelBridge.shared.send?(ScannerFunctions.cancelledEvent, [
-                                "reason": "permission_denied",
-                                "id": pending.id,
-                            ])
-                        }
+                        LaravelBridge.shared.send?(ScannerFunctions.cancelledEvent, [
+                            "reason": granted ? "permission_required" : "permission_denied",
+                            "id": id,
+                        ])
                     }
                 }
 
@@ -112,7 +118,7 @@ enum ScannerFunctions {
         }
     }
 
-    private static func present(prompt: String, continuous: Bool, formats: [String], id: String?) {
+    private static func present(prompt: String, continuous: Bool, allowGallery: Bool, formats: [String], id: String?) {
         let rootViewController = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap { $0.windows }
@@ -129,7 +135,7 @@ enum ScannerFunctions {
         activeController?.finish(cancelled: true, reason: nil)
 
         let types = metadataObjectTypes(for: formats)
-        let controller = ScannerViewController(prompt: prompt, continuous: continuous, formats: formats, types: types, id: id)
+        let controller = ScannerViewController(prompt: prompt, continuous: continuous, allowGallery: allowGallery, formats: formats, types: types, id: id)
         controller.modalPresentationStyle = .fullScreen
         activeController = controller
         presenter.present(controller, animated: true)
@@ -140,6 +146,7 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
 
     private let prompt: String
     private let continuous: Bool
+    private let allowGallery: Bool
     private let requestedFormats: [String]
     private let types: [AVMetadataObject.ObjectType]
     let sessionId: String?
@@ -150,14 +157,16 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
     private var finished = false
     private var torchOn = false
     private let torchButton = UIButton(type: .system)
+    private let galleryButton = UIButton(type: .system)
 
     private var lastValue: String?
     private var lastFiredAt: TimeInterval = 0
     private let repeatDebounceSeconds: TimeInterval = 2.0
 
-    init(prompt: String, continuous: Bool, formats: [String], types: [AVMetadataObject.ObjectType], id: String?) {
+    init(prompt: String, continuous: Bool, allowGallery: Bool, formats: [String], types: [AVMetadataObject.ObjectType], id: String?) {
         self.prompt = prompt
         self.continuous = continuous
+        self.allowGallery = allowGallery
         self.requestedFormats = formats
         self.types = types
         self.sessionId = id
@@ -249,6 +258,27 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
             closeButton.heightAnchor.constraint(equalToConstant: 36),
         ])
 
+        var torchTrailingAnchor: NSLayoutXAxisAnchor = closeButton.leadingAnchor
+
+        if allowGallery {
+            galleryButton.setTitle("🖼", for: .normal)
+            galleryButton.setTitleColor(.white, for: .normal)
+            galleryButton.backgroundColor = UIColor.black.withAlphaComponent(0.4)
+            galleryButton.layer.cornerRadius = 18
+            galleryButton.translatesAutoresizingMaskIntoConstraints = false
+            galleryButton.addTarget(self, action: #selector(galleryTapped), for: .touchUpInside)
+            view.addSubview(galleryButton)
+
+            NSLayoutConstraint.activate([
+                galleryButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+                galleryButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -12),
+                galleryButton.widthAnchor.constraint(equalToConstant: 36),
+                galleryButton.heightAnchor.constraint(equalToConstant: 36),
+            ])
+
+            torchTrailingAnchor = galleryButton.leadingAnchor
+        }
+
         guard let device = captureDevice, device.hasTorch else { return }
 
         torchButton.setTitle("⚡", for: .normal)
@@ -262,7 +292,7 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
 
         NSLayoutConstraint.activate([
             torchButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            torchButton.trailingAnchor.constraint(equalTo: closeButton.leadingAnchor, constant: -12),
+            torchButton.trailingAnchor.constraint(equalTo: torchTrailingAnchor, constant: -12),
             torchButton.widthAnchor.constraint(equalToConstant: 36),
             torchButton.heightAnchor.constraint(equalToConstant: 36),
         ])
@@ -270,6 +300,18 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
 
     @objc private func closeTapped() {
         finish(cancelled: true, reason: "user_cancelled")
+    }
+
+    @objc private func galleryTapped() {
+        guard allowGallery else { return }
+
+        var configuration = PHPickerConfiguration()
+        configuration.filter = .images
+        configuration.selectionLimit = 1
+
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = self
+        present(picker, animated: true)
     }
 
     @objc private func torchTapped() {
@@ -340,6 +382,79 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
         }
     }
 
+    private static func formatName(forSymbology symbology: VNBarcodeSymbology, value: String, requested: [String]) -> String {
+        if symbology == .ean13, value.count == 13, value.hasPrefix("0"),
+           requested.contains("upca") || requested.contains("all"), !requested.contains("ean13") {
+            return "upca"
+        }
+
+        switch symbology {
+        case .qr: return "qr"
+        case .ean13: return "ean13"
+        case .ean8: return "ean8"
+        case .code128: return "code128"
+        case .code39: return "code39"
+        case .upce: return "upce"
+        case .code93: return "code93"
+        case .pdf417: return "pdf417"
+        case .aztec: return "aztec"
+        case .dataMatrix: return "data_matrix"
+        case .itf14: return "itf14"
+        case .codabar: return "codabar"
+        default: return "unknown"
+        }
+    }
+
+    fileprivate func loadAndDecode(provider: NSItemProvider) {
+        provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+            guard let self = self else { return }
+            guard let image = object as? UIImage, let cgImage = image.cgImage else {
+                DispatchQueue.main.async {
+                    self.showGalleryAlert(message: "Couldn't read that image.")
+                }
+                return
+            }
+            self.decodeGalleryImage(cgImage)
+        }
+    }
+
+    private func decodeGalleryImage(_ cgImage: CGImage) {
+        let request = VNDetectBarcodesRequest()
+        request.symbologies = ScannerFunctions.barcodeSymbologies(for: requestedFormats)
+
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+
+        do {
+            try handler.perform([request])
+        } catch {
+            DispatchQueue.main.async { [weak self] in
+                self?.showGalleryAlert(message: "Couldn't read that image.")
+            }
+            return
+        }
+
+        guard let match = request.results?.first(where: { $0.payloadStringValue != nil }),
+              let value = match.payloadStringValue else {
+            DispatchQueue.main.async { [weak self] in
+                self?.showGalleryAlert(message: "No code found in that image.")
+            }
+            return
+        }
+
+        let format = ScannerViewController.formatName(forSymbology: match.symbology, value: value, requested: requestedFormats)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.finish(cancelled: false, data: value, format: format)
+        }
+    }
+
+    private func showGalleryAlert(message: String) {
+        guard !finished else { return }
+        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
     func finish(cancelled: Bool, data: String? = nil, format: String? = nil, reason: String? = nil) {
         guard !finished else { return }
         finished = true
@@ -367,6 +482,19 @@ final class ScannerViewController: UIViewController, AVCaptureMetadataOutputObje
                 "format": format ?? "unknown",
                 "id": sessionId,
             ])
+        }
+    }
+}
+
+extension ScannerViewController: PHPickerViewControllerDelegate {
+    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+        guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else {
+            picker.dismiss(animated: true)
+            return
+        }
+
+        picker.dismiss(animated: true) { [weak self] in
+            self?.loadAndDecode(provider: provider)
         }
     }
 }

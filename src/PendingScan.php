@@ -14,6 +14,8 @@ class PendingScan
 
     protected bool $continuous = false;
 
+    protected bool $allowGallery = true;
+
     protected array $formats = ['qr'];
 
     protected bool $started = false;
@@ -28,6 +30,13 @@ class PendingScan
     public function continuous(bool $continuous = true): self
     {
         $this->continuous = $continuous;
+
+        return $this;
+    }
+
+    public function gallery(bool $allow = true): self
+    {
+        $this->allowGallery = $allow;
 
         return $this;
     }
@@ -80,6 +89,7 @@ class PendingScan
         $result = nativephp_call('MobileScanner.Scan', json_encode([
             'prompt' => $this->prompt ?? 'Scan Code',
             'continuous' => $this->continuous,
+            'allowGallery' => $this->allowGallery,
             'formats' => $this->formats,
             'id' => $this->id,
         ]));

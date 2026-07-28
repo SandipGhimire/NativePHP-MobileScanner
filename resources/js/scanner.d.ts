@@ -36,6 +36,7 @@ export declare class PendingScan implements PromiseLike<
 > {
   prompt(prompt: string): this;
   continuous(continuous?: boolean): this;
+  gallery(allow?: boolean): this;
   formats(formats: BarcodeFormat[]): this;
   id(id: string): this;
   getId(): string | null;

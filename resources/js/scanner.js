@@ -40,6 +40,7 @@ class PendingScan {
     this._id = null;
     this._prompt = null;
     this._continuous = false;
+    this._allowGallery = true;
     this._formats = ["qr"];
     this._started = false;
   }
@@ -51,6 +52,11 @@ class PendingScan {
 
   continuous(continuous = true) {
     this._continuous = continuous;
+    return this;
+  }
+
+  gallery(allow = true) {
+    this._allowGallery = allow;
     return this;
   }
 
@@ -88,6 +94,7 @@ class PendingScan {
     return bridgeCall("MobileScanner.Scan", {
       prompt: this._prompt ?? "Scan Code",
       continuous: this._continuous,
+      allowGallery: this._allowGallery,
       formats: this._formats,
       id: this._id,
     }).then(resolve, reject);
