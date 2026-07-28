@@ -18,6 +18,18 @@ class PendingScan
 
     protected array $formats = ['qr'];
 
+    protected bool $haptics = true;
+
+    protected float $zoom = 1.0;
+
+    protected float $maxZoom = 3.0;
+
+    protected bool $zoomControl = true;
+
+    protected bool $focusOnTap = true;
+
+    protected int $timeout = 0;
+
     protected bool $started = false;
 
     public function prompt(string $prompt): self
@@ -37,6 +49,60 @@ class PendingScan
     public function gallery(bool $allow = true): self
     {
         $this->allowGallery = $allow;
+
+        return $this;
+    }
+
+    public function haptics(bool $enabled = true): self
+    {
+        $this->haptics = $enabled;
+
+        return $this;
+    }
+
+    public function zoom(float $ratio = 1.0): self
+    {
+        if ($ratio <= 0) {
+            throw new InvalidArgumentException('Zoom ratio must be a positive number.');
+        }
+
+        $this->zoom = $ratio;
+
+        return $this;
+    }
+
+    public function maxZoom(float $ratio = 3.0): self
+    {
+        if ($ratio <= 0) {
+            throw new InvalidArgumentException('Max zoom ratio must be a positive number.');
+        }
+
+        $this->maxZoom = $ratio;
+
+        return $this;
+    }
+
+    public function zoomControl(bool $enabled = true): self
+    {
+        $this->zoomControl = $enabled;
+
+        return $this;
+    }
+
+    public function focusOnTap(bool $enabled = true): self
+    {
+        $this->focusOnTap = $enabled;
+
+        return $this;
+    }
+
+    public function timeout(int $seconds = 0): self
+    {
+        if ($seconds < 0) {
+            throw new InvalidArgumentException('Timeout must be zero (disabled) or a positive number of seconds.');
+        }
+
+        $this->timeout = $seconds;
 
         return $this;
     }
@@ -87,10 +153,16 @@ class PendingScan
         }
 
         $result = nativephp_call('MobileScanner.Scan', json_encode([
-            'prompt' => $this->prompt ?? 'Scan Code',
+            'prompt' => $this->prompt ?? '',
             'continuous' => $this->continuous,
             'allowGallery' => $this->allowGallery,
             'formats' => $this->formats,
+            'haptics' => $this->haptics,
+            'zoom' => $this->zoom,
+            'maxZoom' => $this->maxZoom,
+            'zoomControl' => $this->zoomControl,
+            'focusOnTap' => $this->focusOnTap,
+            'timeout' => $this->timeout,
             'id' => $this->id,
         ]));
 

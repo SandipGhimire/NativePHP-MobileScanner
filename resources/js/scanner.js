@@ -42,6 +42,12 @@ class PendingScan {
     this._continuous = false;
     this._allowGallery = true;
     this._formats = ["qr"];
+    this._haptics = true;
+    this._zoom = 1.0;
+    this._maxZoom = 3.0;
+    this._zoomControl = true;
+    this._focusOnTap = true;
+    this._timeout = 0;
     this._started = false;
   }
 
@@ -57,6 +63,45 @@ class PendingScan {
 
   gallery(allow = true) {
     this._allowGallery = allow;
+    return this;
+  }
+
+  haptics(enabled = true) {
+    this._haptics = enabled;
+    return this;
+  }
+
+  zoom(ratio = 1.0) {
+    if (typeof ratio !== "number" || ratio <= 0) {
+      throw new Error("Zoom ratio must be a positive number.");
+    }
+    this._zoom = ratio;
+    return this;
+  }
+
+  maxZoom(ratio = 3.0) {
+    if (typeof ratio !== "number" || ratio <= 0) {
+      throw new Error("Max zoom ratio must be a positive number.");
+    }
+    this._maxZoom = ratio;
+    return this;
+  }
+
+  zoomControl(enabled = true) {
+    this._zoomControl = enabled;
+    return this;
+  }
+
+  focusOnTap(enabled = true) {
+    this._focusOnTap = enabled;
+    return this;
+  }
+
+  timeout(seconds = 0) {
+    if (typeof seconds !== "number" || seconds < 0) {
+      throw new Error("Timeout must be zero (disabled) or a positive number of seconds.");
+    }
+    this._timeout = seconds;
     return this;
   }
 
@@ -92,10 +137,16 @@ class PendingScan {
     this._started = true;
 
     return bridgeCall("MobileScanner.Scan", {
-      prompt: this._prompt ?? "Scan Code",
+      prompt: this._prompt ?? "",
       continuous: this._continuous,
       allowGallery: this._allowGallery,
       formats: this._formats,
+      haptics: this._haptics,
+      zoom: this._zoom,
+      maxZoom: this._maxZoom,
+      zoomControl: this._zoomControl,
+      focusOnTap: this._focusOnTap,
+      timeout: this._timeout,
       id: this._id,
     }).then(resolve, reject);
   }

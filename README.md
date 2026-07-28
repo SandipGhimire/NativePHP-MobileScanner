@@ -32,7 +32,7 @@ Laravel's package auto-discovery registers `ScannerServiceProvider` for you. The
 php artisan native:plugin:register
 ```
 
-This wires up the plugin's `nativephp.json` manifest (bridge functions, Android camera permission, iOS `NSCameraUsageDescription`) into your native build. Rebuild/reinstall the native shell afterwards (`php artisan native:install` or `native:run`) so the permission and bridge functions are picked up.
+This wires up the plugin's `nativephp.json` manifest (bridge functions, Android camera/vibrate permissions, iOS `NSCameraUsageDescription`) into your native build. Rebuild/reinstall the native shell afterwards (`php artisan native:install` or `native:run`) so the permissions and bridge functions are picked up.
 
 ## How It Works (Under the Hood)
 
@@ -97,6 +97,12 @@ If you never call `->scan()` explicitly, it fires automatically when the builder
 | `continuous(bool $continuous = true)` | Keep the scanner open and keep firing `CodeScanned` after each match instead of closing on the first one. |
 | `gallery(bool $allow = true)` | Show/hide the gallery button on the overlay. Defaults to `true`; pass `false` to force camera-only scanning. |
 | `formats(array $formats)` | Restrict detection to one or more formats (see table below). Throws `InvalidArgumentException` if empty or unknown. |
+| `haptics(bool $enabled = true)` | Vibrate/impact-feedback on a successful scan. Defaults to `true`. |
+| `zoom(float $ratio = 1.0)` | Initial camera zoom ratio, clamped to what the device supports. Defaults to `1.0`. Throws `InvalidArgumentException` if not positive. |
+| `maxZoom(float $ratio = 3.0)` | Upper bound of the on-screen zoom slider, clamped to what the device supports. Defaults to `3.0`. Throws `InvalidArgumentException` if not positive. |
+| `zoomControl(bool $enabled = true)` | Show/hide the on-screen zoom slider. Defaults to `true`. |
+| `focusOnTap(bool $enabled = true)` | Let the user tap the preview to refocus the camera. Defaults to `true`. |
+| `timeout(int $seconds = 0)` | Auto-cancel the scan after N seconds, firing `Cancelled` with reason `timeout`. Disabled (`0`) by default. Throws `InvalidArgumentException` if negative. |
 | `id(string $id)` | Custom correlation ID for this scan session (not auto-generated — `null` unless set). |
 | `getId()` | Get this scan's correlation ID, or `null`. |
 | `scan()` | Send the scan request to the native bridge. Returns `bool`. |
@@ -132,7 +138,7 @@ Event::listen(function (CodeScanned $event) {
 });
 
 Event::listen(function (Cancelled $event) {
-    $event->reason; // ?string — e.g. "stopped_by_app", or null if the user just closed it
+    $event->reason; // ?string — e.g. "user_cancelled", "stopped_by_app", "timeout", "camera_error"
     $event->id;     // ?string
 });
 ```
@@ -295,6 +301,12 @@ export function TicketScanner() {
 | `.continuous(continuous?)` | `(boolean = true) => this` | Keep scanning after each match. |
 | `.gallery(allow?)` | `(boolean = true) => this` | Show/hide the gallery button. Defaults to `true`; pass `false` for camera-only. |
 | `.formats(formats)` | `(BarcodeFormat[]) => this` | Restrict detection to given formats. Throws if empty/invalid. |
+| `.haptics(enabled?)` | `(boolean = true) => this` | Vibrate/impact-feedback on a successful scan. Defaults to `true`. |
+| `.zoom(ratio?)` | `(number = 1.0) => this` | Initial camera zoom ratio, clamped to what the device supports. Throws if not positive. |
+| `.maxZoom(ratio?)` | `(number = 3.0) => this` | Upper bound of the on-screen zoom slider, clamped to what the device supports. Throws if not positive. |
+| `.zoomControl(enabled?)` | `(boolean = true) => this` | Show/hide the on-screen zoom slider. Defaults to `true`. |
+| `.focusOnTap(enabled?)` | `(boolean = true) => this` | Let the user tap the preview to refocus the camera. Defaults to `true`. |
+| `.timeout(seconds?)` | `(number = 0) => this` | Auto-cancel the scan after N seconds, firing `Cancelled` with reason `timeout`. Disabled (`0`) by default. Throws if negative. |
 | `.id(id)` | `(string) => this` | Custom correlation ID. |
 | `.getId()` | `() => string \| null` | Read the current correlation ID. |
 | `Scanner.stop(id?)` | `(string?) => Promise<{ stopped: boolean }>` | Dismiss the open scanner. |
@@ -325,7 +337,7 @@ Dispatched when the scanner closes without (another) match — the user tapped c
 
 | Property | Type | Description |
 |---|---|---|
-| `reason` | `?string` / `string \| null` | `"stopped_by_app"` when closed via `stop()`, `null` for a user-initiated close. |
+| `reason` | `?string` / `string \| null` | `"user_cancelled"` when the user taps close, `"stopped_by_app"` when closed via `stop()`, `"timeout"` when `.timeout()` elapsed, `"camera_error"` if the camera failed to start, `"permission_denied"` / `"permission_required"` after a permission prompt resolves (retry `.scan()` on `permission_required`). Never `null` in practice. |
 | `id` | `?string` / `string \| null` | The correlation ID from `.id()`, if one was set. |
 
 - PHP classes: `Sandip\Scanner\Native\Events\Scanner\CodeScanned`, `Sandip\Scanner\Native\Events\Scanner\Cancelled`
@@ -523,7 +535,7 @@ export function TicketScanner() {
 | | Android | iOS |
 |---|---|---|
 | Min OS version | API 23 | 15.0 |
-| Permission | `android.permission.CAMERA` | `NSCameraUsageDescription` in `Info.plist` |
+| Permission | `android.permission.CAMERA`, `android.permission.VIBRATE` | `NSCameraUsageDescription` in `Info.plist` (haptics need no entitlement) |
 | Native implementation | `resources/android/ScannerFunctions.kt` (CameraX + ML Kit barcode scanning) | `resources/ios/ScannerFunctions.swift` (AVFoundation) |
 | Gallery picker | Android Photo Picker (`ActivityResultContracts.PickVisualMedia`) — no permission needed | `PHPickerViewController` — no permission needed |
 | Gallery decoding | ML Kit (`InputImage.fromFilePath`) | Vision (`VNDetectBarcodesRequest`) |

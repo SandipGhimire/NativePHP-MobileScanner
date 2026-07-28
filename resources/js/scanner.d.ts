@@ -38,6 +38,12 @@ export declare class PendingScan implements PromiseLike<
   continuous(continuous?: boolean): this;
   gallery(allow?: boolean): this;
   formats(formats: BarcodeFormat[]): this;
+  haptics(enabled?: boolean): this;
+  zoom(ratio?: number): this;
+  maxZoom(ratio?: number): this;
+  zoomControl(enabled?: boolean): this;
+  focusOnTap(enabled?: boolean): this;
+  timeout(seconds?: number): this;
   id(id: string): this;
   getId(): string | null;
   then<TResult1 = ScanStartedResult | undefined, TResult2 = never>(

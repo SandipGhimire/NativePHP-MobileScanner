@@ -40,7 +40,8 @@
     "android": {
         "min_version": 23,
         "permissions": [
-            "android.permission.CAMERA"
+            "android.permission.CAMERA",
+            "android.permission.VIBRATE"
         ],
         "repositories": [],
         "dependencies": {
