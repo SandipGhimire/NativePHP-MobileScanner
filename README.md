@@ -14,6 +14,10 @@ This package is a **free, self-contained alternative** to the paid `nativephp/mo
 - `CodeScanned` and `Cancelled` Laravel events, or bind straight to Livewire with `#[OnNative]`.
 - Works from PHP (Blade/Livewire) and from JavaScript (Vue, React, Inertia, or plain JS).
 
+## Example App
+
+[Authenticator](https://github.com/SandipGhimire/Authenticator) is a full example app built using this plugin
+
 ## Requirements
 
 - PHP ^8.2
@@ -40,7 +44,7 @@ Same two-phase pattern as every async call in this plugin family — a synchrono
 
 1. **Request out.** `Scanner::scan()->scan()` (PHP) and `Scanner.scan()` (JS) both reach the same bridge — JS via `fetch('/_native/api/call', { method: 'MobileScanner.Scan', params })`, PHP via `nativephp_call('MobileScanner.Scan', json_encode($params))`. The bridge router matches `"MobileScanner.Scan"` to `ScannerFunctions.Scan`, which opens the full-screen camera UI (CameraX + ML Kit on Android, AVFoundation on iOS).
 2. **Immediate ack.** The call returns right away confirming the scanner UI is open — not that anything has been decoded yet.
-3. **Result comes back later, twice, per scan.** Each time the camera decodes a matching code, the native side injects one script into the webview that fires a `native-event` `CustomEvent` on `document` (what the JS `On()`/`Off()` helpers listen for) *and* makes a second call back into Laravel that instantiates and dispatches the real `CodeScanned` event (what `Event::listen()` / `#[OnNative]` pick up). Closing without a match delivers `Cancelled` the same way.
+3. **Result comes back later, twice, per scan.** Each time the camera decodes a matching code, the native side injects one script into the webview that fires a `native-event` `CustomEvent` on `document` (what the JS `On()`/`Off()` helpers listen for) _and_ makes a second call back into Laravel that instantiates and dispatches the real `CodeScanned` event (what `Event::listen()` / `#[OnNative]` pick up). Closing without a match delivers `Cancelled` the same way.
 4. **Continuous mode** just means the scanner stays open and repeats step 3 for every new code, debounced natively so the same code isn't reported multiple times per second, until you call `Scanner::stop()` / `Scanner.stop()` or the user closes it.
 
 Because results are asynchronous and delivered to PHP and JS independently, always drive your UI from the `CodeScanned` / `Cancelled` events — never from the return value of `scan()`.
@@ -91,21 +95,21 @@ If you never call `->scan()` explicitly, it fires automatically when the builder
 
 #### Builder methods
 
-| Method | Description |
-|---|---|
-| `prompt(string $text)` | Instruction text shown above the camera viewfinder. Defaults to `"Scan Code"`. |
-| `continuous(bool $continuous = true)` | Keep the scanner open and keep firing `CodeScanned` after each match instead of closing on the first one. |
-| `gallery(bool $allow = true)` | Show/hide the gallery button on the overlay. Defaults to `true`; pass `false` to force camera-only scanning. |
-| `formats(array $formats)` | Restrict detection to one or more formats (see table below). Throws `InvalidArgumentException` if empty or unknown. |
-| `haptics(bool $enabled = true)` | Vibrate/impact-feedback on a successful scan. Defaults to `true`. |
-| `zoom(float $ratio = 1.0)` | Initial camera zoom ratio, clamped to what the device supports. Defaults to `1.0`. Throws `InvalidArgumentException` if not positive. |
-| `maxZoom(float $ratio = 3.0)` | Upper bound of the on-screen zoom slider, clamped to what the device supports. Defaults to `3.0`. Throws `InvalidArgumentException` if not positive. |
-| `zoomControl(bool $enabled = true)` | Show/hide the on-screen zoom slider. Defaults to `true`. |
-| `focusOnTap(bool $enabled = true)` | Let the user tap the preview to refocus the camera. Defaults to `true`. |
-| `timeout(int $seconds = 0)` | Auto-cancel the scan after N seconds, firing `Cancelled` with reason `timeout`. Disabled (`0`) by default. Throws `InvalidArgumentException` if negative. |
-| `id(string $id)` | Custom correlation ID for this scan session (not auto-generated — `null` unless set). |
-| `getId()` | Get this scan's correlation ID, or `null`. |
-| `scan()` | Send the scan request to the native bridge. Returns `bool`. |
+| Method                                | Description                                                                                                                                               |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompt(string $text)`                | Instruction text shown above the camera viewfinder. Defaults to `"Scan Code"`.                                                                            |
+| `continuous(bool $continuous = true)` | Keep the scanner open and keep firing `CodeScanned` after each match instead of closing on the first one.                                                 |
+| `gallery(bool $allow = true)`         | Show/hide the gallery button on the overlay. Defaults to `true`; pass `false` to force camera-only scanning.                                              |
+| `formats(array $formats)`             | Restrict detection to one or more formats (see table below). Throws `InvalidArgumentException` if empty or unknown.                                       |
+| `haptics(bool $enabled = true)`       | Vibrate/impact-feedback on a successful scan. Defaults to `true`.                                                                                         |
+| `zoom(float $ratio = 1.0)`            | Initial camera zoom ratio, clamped to what the device supports. Defaults to `1.0`. Throws `InvalidArgumentException` if not positive.                     |
+| `maxZoom(float $ratio = 3.0)`         | Upper bound of the on-screen zoom slider, clamped to what the device supports. Defaults to `3.0`. Throws `InvalidArgumentException` if not positive.      |
+| `zoomControl(bool $enabled = true)`   | Show/hide the on-screen zoom slider. Defaults to `true`.                                                                                                  |
+| `focusOnTap(bool $enabled = true)`    | Let the user tap the preview to refocus the camera. Defaults to `true`.                                                                                   |
+| `timeout(int $seconds = 0)`           | Auto-cancel the scan after N seconds, firing `Cancelled` with reason `timeout`. Disabled (`0`) by default. Throws `InvalidArgumentException` if negative. |
+| `id(string $id)`                      | Custom correlation ID for this scan session (not auto-generated — `null` unless set).                                                                     |
+| `getId()`                             | Get this scan's correlation ID, or `null`.                                                                                                                |
+| `scan()`                              | Send the scan request to the native bridge. Returns `bool`.                                                                                               |
 
 #### Supported formats
 
@@ -184,7 +188,12 @@ class TicketScanner extends Component
 This package doesn't publish a `#nativephp` import alias (that's reserved for NativePHP's first-party plugins). Import the file directly — either from the vendor path, or copy it into your own `resources/js/` and import it from there:
 
 ```js
-import { Scanner, On, Off, Events } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import {
+  Scanner,
+  On,
+  Off,
+  Events,
+} from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 ```
 
 Full TypeScript types (including the `BarcodeFormat` union) are included in `scanner.d.ts` alongside it.
@@ -194,35 +203,40 @@ Full TypeScript types (including the `BarcodeFormat` union) are included in `sca
 `Scanner.scan()` returns a thenable builder — `await` it directly, or chain builder methods first:
 
 ```js
-import { Scanner } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import { Scanner } from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 
 await Scanner.scan();
 
 // or fully configured
 await Scanner.scan()
-  .id('ticket-scanner')
-  .prompt('Scan your ticket')
-  .formats(['qr', 'ean13'])
+  .id("ticket-scanner")
+  .prompt("Scan your ticket")
+  .formats(["qr", "ean13"])
   .continuous();
 ```
 
 ### Stopping a scan
 
 ```js
-import { Scanner } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import { Scanner } from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 
-await Scanner.stop();                  // stop whatever scanner is open
-await Scanner.stop('ticket-scanner');  // stop a specific session by id
+await Scanner.stop(); // stop whatever scanner is open
+await Scanner.stop("ticket-scanner"); // stop a specific session by id
 ```
 
 ### Listening for events
 
 ```js
-import { Scanner, On, Off, Events } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import {
+  Scanner,
+  On,
+  Off,
+  Events,
+} from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 
 function handleScanned(payload) {
   // payload: { data: string, format: string, id: string | null }
-  console.log('Scanned:', payload.data, payload.format);
+  console.log("Scanned:", payload.data, payload.format);
 }
 
 function handleCancelled(payload) {
@@ -241,8 +255,13 @@ Off(Events.Scanner.Cancelled, handleCancelled);
 
 ```vue
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
-import { Scanner, On, Off, Events } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import { ref, onMounted, onUnmounted } from "vue";
+import {
+  Scanner,
+  On,
+  Off,
+  Events,
+} from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 
 const scannedValue = ref(null);
 
@@ -254,7 +273,7 @@ onMounted(() => On(Events.Scanner.CodeScanned, handleScanned));
 onUnmounted(() => Off(Events.Scanner.CodeScanned, handleScanned));
 
 async function startScan() {
-  await Scanner.scan().prompt('Scan your ticket').formats(['qr']);
+  await Scanner.scan().prompt("Scan your ticket").formats(["qr"]);
 }
 </script>
 
@@ -267,8 +286,13 @@ async function startScan() {
 ### React example
 
 ```jsx
-import { useState, useEffect, useCallback } from 'react';
-import { Scanner, On, Off, Events } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import { useState, useEffect, useCallback } from "react";
+import {
+  Scanner,
+  On,
+  Off,
+  Events,
+} from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 
 export function TicketScanner() {
   const [scannedValue, setScannedValue] = useState(null);
@@ -280,7 +304,7 @@ export function TicketScanner() {
   }, []);
 
   const startScan = useCallback(() => {
-    Scanner.scan().prompt('Scan your ticket').formats(['qr']);
+    Scanner.scan().prompt("Scan your ticket").formats(["qr"]);
   }, []);
 
   return (
@@ -294,26 +318,26 @@ export function TicketScanner() {
 
 ### JS API reference
 
-| Export | Signature | Description |
-|---|---|---|
-| `Scanner.scan()` | `() => PendingScan` | Start building a scan session. |
-| `.prompt(text)` | `(string) => this` | Instruction text above the viewfinder. |
-| `.continuous(continuous?)` | `(boolean = true) => this` | Keep scanning after each match. |
-| `.gallery(allow?)` | `(boolean = true) => this` | Show/hide the gallery button. Defaults to `true`; pass `false` for camera-only. |
-| `.formats(formats)` | `(BarcodeFormat[]) => this` | Restrict detection to given formats. Throws if empty/invalid. |
-| `.haptics(enabled?)` | `(boolean = true) => this` | Vibrate/impact-feedback on a successful scan. Defaults to `true`. |
-| `.zoom(ratio?)` | `(number = 1.0) => this` | Initial camera zoom ratio, clamped to what the device supports. Throws if not positive. |
-| `.maxZoom(ratio?)` | `(number = 3.0) => this` | Upper bound of the on-screen zoom slider, clamped to what the device supports. Throws if not positive. |
-| `.zoomControl(enabled?)` | `(boolean = true) => this` | Show/hide the on-screen zoom slider. Defaults to `true`. |
-| `.focusOnTap(enabled?)` | `(boolean = true) => this` | Let the user tap the preview to refocus the camera. Defaults to `true`. |
-| `.timeout(seconds?)` | `(number = 0) => this` | Auto-cancel the scan after N seconds, firing `Cancelled` with reason `timeout`. Disabled (`0`) by default. Throws if negative. |
-| `.id(id)` | `(string) => this` | Custom correlation ID. |
-| `.getId()` | `() => string \| null` | Read the current correlation ID. |
-| `Scanner.stop(id?)` | `(string?) => Promise<{ stopped: boolean }>` | Dismiss the open scanner. |
-| `On(event, callback)` | `(string, (payload, eventName) => void) => void` | Subscribe to a native event. |
-| `Off(event, callback)` | `(string, (payload, eventName) => void) => void` | Unsubscribe. |
-| `Events.Scanner.CodeScanned` | `string` | Event name constant. |
-| `Events.Scanner.Cancelled` | `string` | Event name constant. |
+| Export                       | Signature                                        | Description                                                                                                                    |
+| ---------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `Scanner.scan()`             | `() => PendingScan`                              | Start building a scan session.                                                                                                 |
+| `.prompt(text)`              | `(string) => this`                               | Instruction text above the viewfinder.                                                                                         |
+| `.continuous(continuous?)`   | `(boolean = true) => this`                       | Keep scanning after each match.                                                                                                |
+| `.gallery(allow?)`           | `(boolean = true) => this`                       | Show/hide the gallery button. Defaults to `true`; pass `false` for camera-only.                                                |
+| `.formats(formats)`          | `(BarcodeFormat[]) => this`                      | Restrict detection to given formats. Throws if empty/invalid.                                                                  |
+| `.haptics(enabled?)`         | `(boolean = true) => this`                       | Vibrate/impact-feedback on a successful scan. Defaults to `true`.                                                              |
+| `.zoom(ratio?)`              | `(number = 1.0) => this`                         | Initial camera zoom ratio, clamped to what the device supports. Throws if not positive.                                        |
+| `.maxZoom(ratio?)`           | `(number = 3.0) => this`                         | Upper bound of the on-screen zoom slider, clamped to what the device supports. Throws if not positive.                         |
+| `.zoomControl(enabled?)`     | `(boolean = true) => this`                       | Show/hide the on-screen zoom slider. Defaults to `true`.                                                                       |
+| `.focusOnTap(enabled?)`      | `(boolean = true) => this`                       | Let the user tap the preview to refocus the camera. Defaults to `true`.                                                        |
+| `.timeout(seconds?)`         | `(number = 0) => this`                           | Auto-cancel the scan after N seconds, firing `Cancelled` with reason `timeout`. Disabled (`0`) by default. Throws if negative. |
+| `.id(id)`                    | `(string) => this`                               | Custom correlation ID.                                                                                                         |
+| `.getId()`                   | `() => string \| null`                           | Read the current correlation ID.                                                                                               |
+| `Scanner.stop(id?)`          | `(string?) => Promise<{ stopped: boolean }>`     | Dismiss the open scanner.                                                                                                      |
+| `On(event, callback)`        | `(string, (payload, eventName) => void) => void` | Subscribe to a native event.                                                                                                   |
+| `Off(event, callback)`       | `(string, (payload, eventName) => void) => void` | Unsubscribe.                                                                                                                   |
+| `Events.Scanner.CodeScanned` | `string`                                         | Event name constant.                                                                                                           |
+| `Events.Scanner.Cancelled`   | `string`                                         | Event name constant.                                                                                                           |
 
 `await`-ing (or `.then`-ing) a `PendingScan` sends the request to the native bridge exactly once — awaiting it twice is a no-op the second time.
 
@@ -325,20 +349,20 @@ export function TicketScanner() {
 
 Dispatched every time the camera successfully decodes a matching code.
 
-| Property | Type | Description |
-|---|---|---|
-| `data` | `string` / `string` | The decoded value. |
-| `format` | `string` / `string` | Which format matched, e.g. `"qr"`, `"ean13"`. |
-| `id` | `?string` / `string \| null` | The correlation ID from `.id()`, if one was set. |
+| Property | Type                         | Description                                      |
+| -------- | ---------------------------- | ------------------------------------------------ |
+| `data`   | `string` / `string`          | The decoded value.                               |
+| `format` | `string` / `string`          | Which format matched, e.g. `"qr"`, `"ean13"`.    |
+| `id`     | `?string` / `string \| null` | The correlation ID from `.id()`, if one was set. |
 
 ### `Cancelled`
 
 Dispatched when the scanner closes without (another) match — the user tapped close, or `Scanner::stop()` / `Scanner.stop()` was called.
 
-| Property | Type | Description |
-|---|---|---|
+| Property | Type                         | Description                                                                                                                                                                                                                                                                                                                               |
+| -------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `reason` | `?string` / `string \| null` | `"user_cancelled"` when the user taps close, `"stopped_by_app"` when closed via `stop()`, `"timeout"` when `.timeout()` elapsed, `"camera_error"` if the camera failed to start, `"permission_denied"` / `"permission_required"` after a permission prompt resolves (retry `.scan()` on `permission_required`). Never `null` in practice. |
-| `id` | `?string` / `string \| null` | The correlation ID from `.id()`, if one was set. |
+| `id`     | `?string` / `string \| null` | The correlation ID from `.id()`, if one was set.                                                                                                                                                                                                                                                                                          |
 
 - PHP classes: `Sandip\Scanner\Native\Events\Scanner\CodeScanned`, `Sandip\Scanner\Native\Events\Scanner\Cancelled`
 - JS event name constants: `Events.Scanner.CodeScanned`, `Events.Scanner.Cancelled`
@@ -453,14 +477,21 @@ class TicketScanner extends Component
 ```vue
 <!-- resources/js/Pages/TicketScanner.vue -->
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
-import axios from 'axios';
-import { Scanner, On, Off, Events } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import { ref, onMounted, onUnmounted } from "vue";
+import axios from "axios";
+import {
+  Scanner,
+  On,
+  Off,
+  Events,
+} from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 
 const log = ref([]);
 
 async function handleScanned(payload) {
-  const { data: result } = await axios.post('/tickets/check-in', { code: payload.data });
+  const { data: result } = await axios.post("/tickets/check-in", {
+    code: payload.data,
+  });
   log.value.unshift({ name: result.name ?? payload.data, valid: result.valid });
 }
 
@@ -468,11 +499,15 @@ onMounted(() => On(Events.Scanner.CodeScanned, handleScanned));
 onUnmounted(() => Off(Events.Scanner.CodeScanned, handleScanned));
 
 function startScanning() {
-  Scanner.scan().id('check-in').prompt('Scan a ticket').formats(['qr']).continuous();
+  Scanner.scan()
+    .id("check-in")
+    .prompt("Scan a ticket")
+    .formats(["qr"])
+    .continuous();
 }
 
 function stopScanning() {
-  Scanner.stop('check-in');
+  Scanner.stop("check-in");
 }
 </script>
 
@@ -481,8 +516,12 @@ function stopScanning() {
   <button @click="stopScanning">Stop</button>
 
   <ul>
-    <li v-for="(entry, i) in log" :key="i" :class="entry.valid ? 'text-green-600' : 'text-red-600'">
-      {{ entry.name }} — {{ entry.valid ? 'Checked in' : 'Invalid/duplicate' }}
+    <li
+      v-for="(entry, i) in log"
+      :key="i"
+      :class="entry.valid ? 'text-green-600' : 'text-red-600'"
+    >
+      {{ entry.name }} — {{ entry.valid ? "Checked in" : "Invalid/duplicate" }}
     </li>
   </ul>
 </template>
@@ -490,27 +529,41 @@ function stopScanning() {
 
 ```jsx
 // resources/js/Pages/TicketScanner.jsx
-import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-import { Scanner, On, Off, Events } from '../../vendor/sghimire/mobile-scanner/resources/js/scanner.js';
+import { useState, useEffect, useCallback } from "react";
+import axios from "axios";
+import {
+  Scanner,
+  On,
+  Off,
+  Events,
+} from "../../vendor/sghimire/mobile-scanner/resources/js/scanner.js";
 
 export function TicketScanner() {
   const [log, setLog] = useState([]);
 
   useEffect(() => {
     const handleScanned = async (payload) => {
-      const { data: result } = await axios.post('/tickets/check-in', { code: payload.data });
-      setLog((prev) => [{ name: result.name ?? payload.data, valid: result.valid }, ...prev]);
+      const { data: result } = await axios.post("/tickets/check-in", {
+        code: payload.data,
+      });
+      setLog((prev) => [
+        { name: result.name ?? payload.data, valid: result.valid },
+        ...prev,
+      ]);
     };
     On(Events.Scanner.CodeScanned, handleScanned);
     return () => Off(Events.Scanner.CodeScanned, handleScanned);
   }, []);
 
   const startScanning = useCallback(() => {
-    Scanner.scan().id('check-in').prompt('Scan a ticket').formats(['qr']).continuous();
+    Scanner.scan()
+      .id("check-in")
+      .prompt("Scan a ticket")
+      .formats(["qr"])
+      .continuous();
   }, []);
 
-  const stopScanning = useCallback(() => Scanner.stop('check-in'), []);
+  const stopScanning = useCallback(() => Scanner.stop("check-in"), []);
 
   return (
     <>
@@ -518,8 +571,8 @@ export function TicketScanner() {
       <button onClick={stopScanning}>Stop</button>
       <ul>
         {log.map((entry, i) => (
-          <li key={i} style={{ color: entry.valid ? 'green' : 'red' }}>
-            {entry.name} — {entry.valid ? 'Checked in' : 'Invalid/duplicate'}
+          <li key={i} style={{ color: entry.valid ? "green" : "red" }}>
+            {entry.name} — {entry.valid ? "Checked in" : "Invalid/duplicate"}
           </li>
         ))}
       </ul>
@@ -532,13 +585,13 @@ export function TicketScanner() {
 
 ## Platform notes
 
-| | Android | iOS |
-|---|---|---|
-| Min OS version | API 23 | 15.0 |
-| Permission | `android.permission.CAMERA`, `android.permission.VIBRATE` | `NSCameraUsageDescription` in `Info.plist` (haptics need no entitlement) |
-| Native implementation | `resources/android/ScannerFunctions.kt` (CameraX + ML Kit barcode scanning) | `resources/ios/ScannerFunctions.swift` (AVFoundation) |
-| Gallery picker | Android Photo Picker (`ActivityResultContracts.PickVisualMedia`) — no permission needed | `PHPickerViewController` — no permission needed |
-| Gallery decoding | ML Kit (`InputImage.fromFilePath`) | Vision (`VNDetectBarcodesRequest`) |
+|                       | Android                                                                                 | iOS                                                                      |
+| --------------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Min OS version        | API 23                                                                                  | 15.0                                                                     |
+| Permission            | `android.permission.CAMERA`, `android.permission.VIBRATE`                               | `NSCameraUsageDescription` in `Info.plist` (haptics need no entitlement) |
+| Native implementation | `resources/android/ScannerFunctions.kt` (CameraX + ML Kit barcode scanning)             | `resources/ios/ScannerFunctions.swift` (AVFoundation)                    |
+| Gallery picker        | Android Photo Picker (`ActivityResultContracts.PickVisualMedia`) — no permission needed | `PHPickerViewController` — no permission needed                          |
+| Gallery decoding      | ML Kit (`InputImage.fromFilePath`)                                                      | Vision (`VNDetectBarcodesRequest`)                                       |
 
 Both are configured automatically by `nativephp.json` — you don't need to edit native project files by hand. Continuous mode uses a debounce window on both platforms so the same code isn't reported multiple times per second.
 
